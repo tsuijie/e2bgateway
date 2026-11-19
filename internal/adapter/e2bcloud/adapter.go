@@ -440,7 +440,7 @@ func (a *Adapter) DeleteTemplate(ctx context.Context, templateID string) error {
 // requests touching them are rejected as unsupported rather than silently
 // dropped.
 func (a *Adapter) UpdateTemplate(ctx context.Context, templateID string, req *adapter.UpdateTemplateRequest) (*adapter.Template, error) {
-	if req.Name != "" || req.CPUCount != nil || req.MemoryMB != nil {
+	if req.Name != nil || req.CPUCount != nil || req.MemoryMB != nil {
 		return nil, fmt.Errorf("updating name, cpuCount, or memoryMB of template %q is not supported by the E2B Cloud API: %w", templateID, adapter.ErrUnsupported)
 	}
 	if req.Public != nil {

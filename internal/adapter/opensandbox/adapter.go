@@ -829,8 +829,8 @@ func (a *Adapter) GetTemplate(ctx context.Context, templateID string) (*adapter.
 // as not found.
 func (a *Adapter) UpdateTemplate(ctx context.Context, templateID string, req *adapter.UpdateTemplateRequest) (*adapter.Template, error) {
 	err := a.templates.UpdateTemplate(ctx, templateID, func(entry *TemplateEntry) error {
-		if req.Name != "" {
-			entry.Name = req.Name
+		if req.Name != nil {
+			entry.Name = *req.Name
 		}
 		if req.Public != nil {
 			entry.Public = *req.Public

@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -1618,5 +1620,24 @@ func TestTriggerBuildHandler_RealBackendErrors(t *testing.T) {
 				t.Fatalf("got %d, want %d: %s", w.Code, tc.status, w.Body.String())
 			}
 		})
+	}
+}
+
+func TestUpdateTemplateHandlerNamePresence(t *testing.T) {
+	reg, router := setupTestRouter()
+	handler := v1.UpdateTemplateHandler(reg, router)
+	for _, body := range []string{`{"name": "renamed"}`, `{"public": true}`, `{"name": ""}`} {
+		w := httptest.NewRecorder()
+		handler(w, testWithChiParam(http.MethodPatch, "/v2/templates/base", body, map[string]string{"templateID": "base"}))
+		require.Equal(t, http.StatusOK, w.Code)
+		want := "renamed"
+		if body == `{"name": ""}` {
+			want = ""
+		}
+		backend, ok := reg.Get("mock")
+		require.True(t, ok)
+		stored, err := backend.GetTemplate(context.Background(), "base")
+		require.NoError(t, err)
+		assert.Equal(t, want, stored.Name)
 	}
 }

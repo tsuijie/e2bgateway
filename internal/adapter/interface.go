@@ -293,12 +293,12 @@ type CreateTemplateRequest struct {
 }
 
 // UpdateTemplateRequest is the input for updating an existing template.
-// Only non-zero/non-nil fields are applied (PATCH semantics).
+// Only non-nil fields are applied (PATCH semantics).
 type UpdateTemplateRequest struct {
-	Name     string `json:"name,omitempty"`
-	Public   *bool  `json:"public,omitempty"`
-	CPUCount *int   `json:"cpuCount,omitempty"`
-	MemoryMB *int   `json:"memoryMB,omitempty"`
+	Name     *string `json:"name,omitempty"`
+	Public   *bool   `json:"public,omitempty"`
+	CPUCount *int    `json:"cpuCount,omitempty"`
+	MemoryMB *int    `json:"memoryMB,omitempty"`
 }
 
 // Build status constants for TemplateBuild.Status.

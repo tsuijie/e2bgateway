@@ -309,9 +309,10 @@ func TestE2BCloudAdapter_UpdateTemplate_UnsupportedFields(t *testing.T) {
 	a := NewAdapterWithClient("e2b-cloud", client, nil)
 
 	for name, req := range map[string]*adapter.UpdateTemplateRequest{
-		"name":     {Name: "renamed"},
-		"cpuCount": {CPUCount: new(4)},
-		"memoryMB": {MemoryMB: new(2048)},
+		"name":       {Name: new("renamed")},
+		"empty name": {Name: new("")},
+		"cpuCount":   {CPUCount: new(4)},
+		"memoryMB":   {MemoryMB: new(2048)},
 	} {
 		_, err := a.UpdateTemplate(context.Background(), "base", req)
 		if !errors.Is(err, adapter.ErrUnsupported) {

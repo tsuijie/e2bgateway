@@ -20,6 +20,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/e2bgateway/e2bgateway/internal/adapter"
 	mockadapter "github.com/e2bgateway/e2bgateway/internal/adapter/mock"
 	"github.com/e2bgateway/e2bgateway/internal/sessionstore"
@@ -260,7 +263,7 @@ func TestMockAdapterTemplates(t *testing.T) {
 	// Update template (persisted, issue #123)
 	pub := true
 	updated, err := a.UpdateTemplate(ctx, build.TemplateID, &adapter.UpdateTemplateRequest{
-		Name:     "renamed",
+		Name:     new("renamed"),
 		Public:   &pub,
 		CPUCount: new(8),
 		MemoryMB: new(4096),
@@ -279,8 +282,19 @@ func TestMockAdapterTemplates(t *testing.T) {
 		t.Errorf("persisted %+v, want name=renamed public=true cpu=8 mem=4096", got)
 	}
 
+	_, err = a.UpdateTemplate(ctx, build.TemplateID, &adapter.UpdateTemplateRequest{})
+	require.NoError(t, err)
+	preserved, err := a.GetTemplate(ctx, build.TemplateID)
+	require.NoError(t, err)
+	assert.Equal(t, "renamed", preserved.Name)
+	_, err = a.UpdateTemplate(ctx, build.TemplateID, &adapter.UpdateTemplateRequest{Name: new("")})
+	require.NoError(t, err)
+	cleared, err := a.GetTemplate(ctx, build.TemplateID)
+	require.NoError(t, err)
+	assert.Empty(t, cleared.Name)
+
 	// Update non-existent template
-	if _, err := a.UpdateTemplate(ctx, "nope", &adapter.UpdateTemplateRequest{Name: "x"}); err == nil {
+	if _, err := a.UpdateTemplate(ctx, "nope", &adapter.UpdateTemplateRequest{Name: new("x")}); err == nil {
 		t.Error("expected error updating non-existent template")
 	}
 

@@ -421,8 +421,8 @@ func (a *Adapter) UpdateTemplate(_ context.Context, templateID string, req *adap
 	// Copy-on-write: GetTemplate/ListTemplates hand out the stored pointers,
 	// so mutating in place would race with readers holding an older snapshot.
 	updated := *t
-	if req.Name != "" {
-		updated.Name = req.Name
+	if req.Name != nil {
+		updated.Name = *req.Name
 	}
 	if req.Public != nil {
 		updated.Public = *req.Public

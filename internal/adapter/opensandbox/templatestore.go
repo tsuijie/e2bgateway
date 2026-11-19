@@ -51,6 +51,7 @@ type TemplateStore interface {
 	// UpdateTemplate applies an update function to an existing template.
 	// Returns ErrTemplateNotFound if the template does not exist. The update
 	// function must not be called after UpdateTemplate returns.
+	// The callback may run more than once on a conflict and must have no external side effects.
 	UpdateTemplate(ctx context.Context, templateID string, update func(*TemplateEntry) error) error
 
 	// DeleteTemplate removes a template. Returns ErrTemplateNotFound if the

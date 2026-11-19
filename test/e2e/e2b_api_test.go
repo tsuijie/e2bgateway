@@ -636,6 +636,13 @@ func TestE2E_UpdateTemplate(t *testing.T) {
 	if notFoundResp.StatusCode != http.StatusNotFound {
 		t.Errorf("patch unknown: expected 404, got %d", notFoundResp.StatusCode)
 	}
+	var errorBody struct {
+		Code    *int    `json:"code"`
+		Message *string `json:"message"`
+	}
+	decodeJSON(t, notFoundResp, &errorBody)
+	assert.NotNil(t, errorBody.Code)
+	assert.NotNil(t, errorBody.Message)
 }
 
 // ----- E2E Test: Update Template via e2b-cloud (upstream passthrough) -----
@@ -707,9 +714,10 @@ func TestE2E_UpdateTemplate_E2BCloud(t *testing.T) {
 	// Fields the upstream API cannot persist must yield 501, not a fake 200,
 	// and must not reach upstream at all.
 	for name, req := range map[string]dto.UpdateTemplateRequest{
-		"name":     {Name: "renamed"},
-		"cpuCount": {CPUCount: new(4)},
-		"memoryMB": {MemoryMB: new(2048)},
+		"name":       {Name: new("renamed")},
+		"empty name": {Name: new("")},
+		"cpuCount":   {CPUCount: new(4)},
+		"memoryMB":   {MemoryMB: new(2048)},
 	} {
 		unsupportedResp := doJSON(t, ts, http.MethodPatch, "/v2/templates/base", req)
 		if unsupportedResp.StatusCode != http.StatusNotImplemented {

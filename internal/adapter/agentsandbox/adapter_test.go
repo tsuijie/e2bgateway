@@ -38,7 +38,7 @@ import (
 // pod resources are controller-owned.
 func TestUpdateTemplate_Unsupported(t *testing.T) {
 	a := &Adapter{}
-	_, err := a.UpdateTemplate(context.Background(), "tpl", &adapter.UpdateTemplateRequest{Name: "renamed"})
+	_, err := a.UpdateTemplate(context.Background(), "tpl", &adapter.UpdateTemplateRequest{Name: new("renamed")})
 	if !errors.Is(err, adapter.ErrUnsupported) {
 		t.Fatalf("got %v, want ErrUnsupported", err)
 	}

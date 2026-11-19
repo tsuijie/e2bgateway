@@ -1144,7 +1144,7 @@ func TestUpdateTemplate(t *testing.T) {
 
 	pub := true
 	updated, err := a.UpdateTemplate(ctx, build.TemplateID, &adapter.UpdateTemplateRequest{
-		Name:     "upd-tpl-renamed",
+		Name:     new("upd-tpl-renamed"),
 		Public:   &pub,
 		CPUCount: new(4),
 		MemoryMB: new(2048),
@@ -1163,8 +1163,19 @@ func TestUpdateTemplate(t *testing.T) {
 	assert.Equal(t, 4, tpl.CPUCount)
 	assert.Equal(t, 2048, tpl.MemoryMB)
 
+	_, err = a.UpdateTemplate(ctx, build.TemplateID, &adapter.UpdateTemplateRequest{})
+	require.NoError(t, err)
+	preserved, err := a.GetTemplate(ctx, build.TemplateID)
+	require.NoError(t, err)
+	assert.Equal(t, "upd-tpl-renamed", preserved.Name)
+	_, err = a.UpdateTemplate(ctx, build.TemplateID, &adapter.UpdateTemplateRequest{Name: new("")})
+	require.NoError(t, err)
+	cleared, err := a.GetTemplate(ctx, build.TemplateID)
+	require.NoError(t, err)
+	assert.Empty(t, cleared.Name)
+
 	// Unmanaged (synthetic) templates have no store entry: not found.
-	_, err = a.UpdateTemplate(ctx, "some-image", &adapter.UpdateTemplateRequest{Name: "x"})
+	_, err = a.UpdateTemplate(ctx, "some-image", &adapter.UpdateTemplateRequest{Name: new("x")})
 	assert.True(t, errors.Is(err, ErrTemplateNotFound), "got %v, want ErrTemplateNotFound", err)
 }
 
