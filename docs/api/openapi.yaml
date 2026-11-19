@@ -1142,11 +1142,19 @@ paths:
               memoryMB: 2048
       responses:
         "200":
-          description: Template updated
+          description: Template updated; the body reflects the state persisted in the backend
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/V2TemplateInfo"
+                $ref: "#/components/schemas/TemplateInfo"
+              example:
+                templateID: "tpl_abc123"
+                buildID: "build_abc123"
+                cpuCount: 4
+                memoryMB: 2048
+                public: false
+                ready: true
+                createdAt: "2026-01-15T10:30:00Z"
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -1157,6 +1165,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+              example:
+                code: 501
+                message: "Not Implemented"
 
   # ---------------------------------------------------------
   # v2 Template Tags

@@ -638,6 +638,97 @@ func TestE2E_UpdateTemplate(t *testing.T) {
 	}
 }
 
+// ----- E2E Test: Update Template via e2b-cloud (upstream passthrough) -----
+
+func TestE2E_UpdateTemplate_E2BCloud(t *testing.T) {
+	public := true
+	var patchedBodies []map[string]any
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPatch && r.URL.Path == "/v2/templates/base":
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			patchedBodies = append(patchedBodies, body)
+			if v, ok := body["public"].(bool); ok {
+				public = v
+			}
+			_, _ = w.Write([]byte(`{"names":["base"]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/templates/base":
+			_ = json.NewEncoder(w).Encode(dto.TemplateInfo{
+				TemplateID: "base",
+				Public:     public,
+				Ready:      true,
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(dto.ErrorResponse{Code: 404, Message: "template not found"})
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	ts := testServerWithConfig(t, &config.Config{
+		Server: config.ServerConfig{
+			HTTP: config.HTTPConfig{Address: "127.0.0.1:0"},
+		},
+		Backends: []config.BackendConfig{
+			{
+				Name:    "e2b-cloud",
+				Type:    "e2b-cloud",
+				Enabled: true,
+				Config: map[string]any{
+					"endpoint": upstream.URL,
+					"apiKey":   "test-api-key",
+				},
+			},
+		},
+		Routing: config.RoutingConfig{
+			DefaultBackend: "e2b-cloud",
+			Strategy:       "static",
+		},
+	})
+
+	// Visibility change is forwarded to the upstream PATCH endpoint and the
+	// response reflects the upstream-persisted state.
+	resp := doJSON(t, ts, http.MethodPatch, "/v2/templates/base", dto.UpdateTemplateRequest{
+		Public: new(false),
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("patch public: expected 200, got %d", resp.StatusCode)
+	}
+	var info dto.TemplateInfo
+	decodeJSON(t, resp, &info)
+	if info.Public {
+		t.Error("response should reflect upstream state (public=false)")
+	}
+	require.Len(t, patchedBodies, 1)
+	require.Equal(t, map[string]any{"public": false}, patchedBodies[0])
+
+	// Fields the upstream API cannot persist must yield 501, not a fake 200,
+	// and must not reach upstream at all.
+	for name, req := range map[string]dto.UpdateTemplateRequest{
+		"name":     {Name: "renamed"},
+		"cpuCount": {CPUCount: new(4)},
+		"memoryMB": {MemoryMB: new(2048)},
+	} {
+		unsupportedResp := doJSON(t, ts, http.MethodPatch, "/v2/templates/base", req)
+		if unsupportedResp.StatusCode != http.StatusNotImplemented {
+			t.Errorf("%s: expected 501, got %d", name, unsupportedResp.StatusCode)
+		}
+	}
+	if len(patchedBodies) != 1 {
+		t.Errorf("unsupported fields must not reach upstream, got %d PATCHes", len(patchedBodies))
+	}
+
+	// Unknown template: the upstream 404 surfaces as 404.
+	notFoundResp := doJSON(t, ts, http.MethodPatch, "/v2/templates/does-not-exist", dto.UpdateTemplateRequest{
+		Public: new(true),
+	})
+	if notFoundResp.StatusCode != http.StatusNotFound {
+		t.Errorf("patch unknown: expected 404, got %d", notFoundResp.StatusCode)
+	}
+}
+
 // ----- E2E Test: v2 List Sandboxes -----
 
 func TestE2E_V2_ListSandboxes(t *testing.T) {
