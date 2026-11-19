@@ -257,6 +257,33 @@ func TestMockAdapterTemplates(t *testing.T) {
 		t.Error("expected non-empty template ID")
 	}
 
+	// Update template (persisted, issue #123)
+	pub := true
+	updated, err := a.UpdateTemplate(ctx, build.TemplateID, &adapter.UpdateTemplateRequest{
+		Name:     "renamed",
+		Public:   &pub,
+		CPUCount: new(8),
+		MemoryMB: new(4096),
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.Name != "renamed" || !updated.Public || updated.CPUCount != 8 || updated.MemoryMB != 4096 {
+		t.Errorf("update returned %+v, want name=renamed public=true cpu=8 mem=4096", updated)
+	}
+	got, err := a.GetTemplate(ctx, build.TemplateID)
+	if err != nil {
+		t.Fatalf("get after update: %v", err)
+	}
+	if got.Name != "renamed" || !got.Public || got.CPUCount != 8 || got.MemoryMB != 4096 {
+		t.Errorf("persisted %+v, want name=renamed public=true cpu=8 mem=4096", got)
+	}
+
+	// Update non-existent template
+	if _, err := a.UpdateTemplate(ctx, "nope", &adapter.UpdateTemplateRequest{Name: "x"}); err == nil {
+		t.Error("expected error updating non-existent template")
+	}
+
 	// Delete template
 	if err := a.DeleteTemplate(ctx, build.TemplateID); err != nil {
 		t.Fatalf("delete: %v", err)

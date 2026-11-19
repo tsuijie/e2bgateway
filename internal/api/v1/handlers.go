@@ -1324,30 +1324,46 @@ func UpdateTemplateHandler(registry *adapter.Registry, router *routing.Router) h
 			return
 		}
 
-		// Get existing template, update fields, and re-create
-		for _, a := range registry.List() {
-			tmpl, err := a.GetTemplate(r.Context(), templateID)
-			if err == nil {
-				// Template exists - update is a no-op for most fields in backends
-				// Return updated template info
-				info := templateToDTO(tmpl)
-				if req.Name != "" {
-					info.TemplateID = tmpl.TemplateID
-				}
-				if req.Public != nil {
-					info.Public = *req.Public
-				}
-				if req.CPUCount != nil {
-					info.CPUCount = *req.CPUCount
-				}
-				if req.MemoryMB != nil {
-					info.MemoryMB = *req.MemoryMB
-				}
-				writeJSON(w, http.StatusOK, info)
-				return
-			}
+		updateReq := &adapter.UpdateTemplateRequest{
+			Name:     req.Name,
+			Public:   req.Public,
+			CPUCount: req.CPUCount,
+			MemoryMB: req.MemoryMB,
 		}
 
+		// Persist the update through the owning adapter. An adapter that
+		// recognizes the template but cannot update it reports ErrUnsupported
+		// (501); a not-found from UpdateTemplate means the adapter's GetTemplate
+		// probe was broader than its store (e.g. opensandbox synthesizes
+		// templates for any image URI). Both keep the scan going so the backend
+		// that actually owns the template still gets a chance.
+		var unsupportedErr error
+		for _, a := range registry.List() {
+			if _, err := a.GetTemplate(r.Context(), templateID); err != nil {
+				continue
+			}
+			updated, err := a.UpdateTemplate(r.Context(), templateID, updateReq)
+			if err == nil {
+				writeJSON(w, http.StatusOK, templateToDTO(updated))
+				return
+			}
+			if errors.Is(err, adapter.ErrUnsupported) {
+				if unsupportedErr == nil {
+					unsupportedErr = err
+				}
+				continue
+			}
+			if isNotFoundStatus(err) {
+				continue
+			}
+			writeAdapterError(w, err, http.StatusInternalServerError)
+			return
+		}
+
+		if unsupportedErr != nil {
+			writeAdapterError(w, unsupportedErr, http.StatusNotImplemented)
+			return
+		}
 		writeError(w, http.StatusNotFound, "Template '"+templateID+"' not found")
 	}
 }

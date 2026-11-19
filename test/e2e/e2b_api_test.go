@@ -584,6 +584,60 @@ func TestE2E_Templates(t *testing.T) {
 	}
 }
 
+// ----- E2E Test: Update Template (issue #123) -----
+
+func TestE2E_UpdateTemplate(t *testing.T) {
+	ts := testServer(t)
+
+	// Create a template to update.
+	createResp := doJSON(t, ts, http.MethodPost, "/templates", dto.TemplateBuildRequest{
+		Name:     "upd-e2e",
+		CPUCount: 2,
+		MemoryMB: 512,
+	})
+	if createResp.StatusCode != http.StatusAccepted {
+		t.Fatalf("create: expected 202, got %d", createResp.StatusCode)
+	}
+	var build dto.TemplateBuildResponse
+	decodeJSON(t, createResp, &build)
+
+	// PATCH via the v2 route; the update must be persisted, not only echoed.
+	patchResp := doJSON(t, ts, http.MethodPatch, "/v2/templates/"+build.TemplateID, dto.UpdateTemplateRequest{
+		Public:   new(false),
+		CPUCount: new(4),
+		MemoryMB: new(2048),
+	})
+	if patchResp.StatusCode != http.StatusOK {
+		t.Fatalf("patch: expected 200, got %d", patchResp.StatusCode)
+	}
+	var patched dto.TemplateInfo
+	decodeJSON(t, patchResp, &patched)
+	if patched.Public || patched.CPUCount != 4 || patched.MemoryMB != 2048 {
+		t.Errorf("patch response = {public:%v cpu:%d mem:%d}, want {false 4 2048}",
+			patched.Public, patched.CPUCount, patched.MemoryMB)
+	}
+
+	// Verify persistence with an independent GET.
+	getResp := doJSON(t, ts, http.MethodGet, "/templates/"+build.TemplateID, nil)
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("get: expected 200, got %d", getResp.StatusCode)
+	}
+	var fetched dto.TemplateInfo
+	decodeJSON(t, getResp, &fetched)
+	if fetched.Public || fetched.CPUCount != 4 || fetched.MemoryMB != 2048 {
+		t.Errorf("persisted template = {public:%v cpu:%d mem:%d}, want {false 4 2048}",
+			fetched.Public, fetched.CPUCount, fetched.MemoryMB)
+	}
+
+	// Unknown template → 404.
+	notFoundResp := doJSON(t, ts, http.MethodPatch, "/v2/templates/does-not-exist", dto.UpdateTemplateRequest{
+		Public: new(true),
+	})
+	if notFoundResp.StatusCode != http.StatusNotFound {
+		t.Errorf("patch unknown: expected 404, got %d", notFoundResp.StatusCode)
+	}
+}
+
 // ----- E2E Test: v2 List Sandboxes -----
 
 func TestE2E_V2_ListSandboxes(t *testing.T) {

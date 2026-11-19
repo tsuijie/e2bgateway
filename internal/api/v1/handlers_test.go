@@ -200,6 +200,119 @@ func TestListTemplatesHandler(t *testing.T) {
 	}
 }
 
+func TestUpdateTemplateHandlerPersists(t *testing.T) {
+	reg, r := setupTestRouter()
+	handler := v1.UpdateTemplateHandler(reg, r)
+
+	body := `{"public": false, "cpuCount": 4, "memoryMB": 2048}`
+	req := testWithChiParam(http.MethodPatch, "/api/v1/templates/base", body, map[string]string{
+		"templateID": "base",
+	})
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d (body: %s)", w.Code, w.Body.String())
+	}
+
+	var resp dto.TemplateInfo
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if resp.Public || resp.CPUCount != 4 || resp.MemoryMB != 2048 {
+		t.Errorf("response = {public:%v cpu:%d mem:%d}, want {false 4 2048}", resp.Public, resp.CPUCount, resp.MemoryMB)
+	}
+
+	// The update must be persisted in the backend, not only reflected in the
+	// response body (issue #123).
+	a, ok := reg.Get("mock")
+	if !ok {
+		t.Fatal("mock adapter not registered")
+	}
+	tmpl, err := a.GetTemplate(context.Background(), "base")
+	if err != nil {
+		t.Fatalf("GetTemplate after update: %v", err)
+	}
+	if tmpl.Public || tmpl.CPUCount != 4 || tmpl.MemoryMB != 2048 {
+		t.Errorf("persisted template = {public:%v cpu:%d mem:%d}, want {false 4 2048}", tmpl.Public, tmpl.CPUCount, tmpl.MemoryMB)
+	}
+}
+
+func TestUpdateTemplateHandlerNotFound(t *testing.T) {
+	reg, r := setupTestRouter()
+	handler := v1.UpdateTemplateHandler(reg, r)
+
+	req := testWithChiParam(http.MethodPatch, "/api/v1/templates/missing", `{"public": true}`, map[string]string{
+		"templateID": "missing",
+	})
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateTemplateHandlerUnsupported(t *testing.T) {
+	reg := adapter.NewRegistry(sessionstore.NewMemory(), time.Hour)
+	backend := testmock.NewMockBackend()
+	backend.UpdateTemplateFn = func(_ context.Context, id string, _ *adapter.UpdateTemplateRequest) (*adapter.Template, error) {
+		return nil, fmt.Errorf("update template not supported by test backend %q: %w", id, adapter.ErrUnsupported)
+	}
+	if err := reg.Register(backend); err != nil {
+		t.Fatalf("registering backend: %v", err)
+	}
+	r := routing.NewRouter(config.RoutingConfig{DefaultBackend: backend.Name(), Strategy: "static"}, reg)
+	handler := v1.UpdateTemplateHandler(reg, r)
+
+	req := testWithChiParam(http.MethodPatch, "/api/v1/templates/base", `{"name": "renamed"}`, map[string]string{
+		"templateID": "base",
+	})
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	if w.Code != http.StatusNotImplemented {
+		t.Errorf("expected status 501, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+func TestUpdateTemplateHandlerSkipsBackendWithNarrowerStore(t *testing.T) {
+	// A backend whose GetTemplate recognizes any ID (like opensandbox's
+	// synthetic templates) but whose UpdateTemplate reports not-found must
+	// not short-circuit the scan away from the backend that owns the
+	// template, regardless of registry iteration order.
+	reg := adapter.NewRegistry(sessionstore.NewMemory(), time.Hour)
+
+	synthetic := testmock.NewMockBackend()
+	synthetic.NameFn = func() string { return "synthetic" }
+	synthetic.GetTemplateFn = func(_ context.Context, id string) (*adapter.Template, error) {
+		return &adapter.Template{TemplateID: id, Name: id}, nil
+	}
+	synthetic.UpdateTemplateFn = func(_ context.Context, id string, _ *adapter.UpdateTemplateRequest) (*adapter.Template, error) {
+		return nil, apierrors.NewNotFound(schema.GroupResource{Resource: "templates"}, id)
+	}
+	owner := testmock.NewMockBackend() // delegates to the seeded mock adapter
+
+	for _, b := range []*testmock.MockBackend{synthetic, owner} {
+		if err := reg.Register(b); err != nil {
+			t.Fatalf("registering backend: %v", err)
+		}
+	}
+
+	r := routing.NewRouter(config.RoutingConfig{DefaultBackend: "mock-backend", Strategy: "static"}, reg)
+	handler := v1.UpdateTemplateHandler(reg, r)
+
+	req := testWithChiParam(http.MethodPatch, "/api/v1/templates/base", `{"cpuCount": 8}`, map[string]string{
+		"templateID": "base",
+	})
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 regardless of backend order, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
 func TestExecuteCodeHandler(t *testing.T) {
 	reg, r := setupTestRouter()
 

@@ -125,6 +125,7 @@ type TemplateEntry struct {
 	StartCmd   string            `json:"startCmd,omitempty"`
 	CPUCount   int               `json:"cpuCount,omitempty"`
 	MemoryMB   int               `json:"memoryMB,omitempty"`
+	Public     bool              `json:"public,omitempty"`
 	BuildID    string            `json:"buildID,omitempty"`
 	CreatedAt  time.Time         `json:"createdAt"`
 	Metadata   map[string]string `json:"metadata,omitempty"`
