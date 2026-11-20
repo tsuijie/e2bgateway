@@ -191,6 +191,19 @@ type unsupportedError struct{}
 func (unsupportedError) Error() string       { return "operation not supported by backend" }
 func (unsupportedError) HTTPStatusCode() int { return 501 }
 
+// ErrTemplateNotFound is returned by adapters when a template does not exist.
+// It carries HTTP 404 so handlers can distinguish "no such template" from a
+// real backend failure via the HTTPStatusCode contract (errors.As). Wrap it
+// with %w and the template ID so errors.Is keeps working.
+var ErrTemplateNotFound = templateNotFoundError{}
+
+// templateNotFoundError preserves errors.Is identity and exposes the adapter
+// HTTP status contract (404 Not Found).
+type templateNotFoundError struct{}
+
+func (templateNotFoundError) Error() string       { return "template not found" }
+func (templateNotFoundError) HTTPStatusCode() int { return 404 }
+
 // CreateSandboxRequest is the input for creating a new sandbox.
 type CreateSandboxRequest struct {
 	TemplateID string            `json:"templateID"`

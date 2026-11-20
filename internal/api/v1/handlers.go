@@ -1331,15 +1331,27 @@ func UpdateTemplateHandler(registry *adapter.Registry, router *routing.Router) h
 			MemoryMB: req.MemoryMB,
 		}
 
-		// Persist the update through the owning adapter. An adapter that
-		// recognizes the template but cannot update it reports ErrUnsupported
-		// (501); a not-found from UpdateTemplate means the adapter's GetTemplate
-		// probe was broader than its store (e.g. opensandbox synthesizes
-		// templates for any image URI). Both keep the scan going so the backend
-		// that actually owns the template still gets a chance.
-		var unsupportedErr error
+		// Persist the update through the owning adapter, scanning every backend:
+		//   - success → 200 with the persisted template (returned immediately)
+		//   - ErrUnsupported → the backend recognizes templates but cannot update
+		//     them; remember it and keep scanning
+		//   - a not-found from GetTemplate or UpdateTemplate → this backend does
+		//     not own the template (or its probe is broader than its store, e.g.
+		//     opensandbox synthesizes templates for any image URI); keep scanning
+		//   - any other GetTemplate error → a real failure that left ownership
+		//     unknown; remember it and keep scanning
+		//   - any other UpdateTemplate error → the confirmed owner failed; surface
+		//     it immediately
+		// Precedence when no backend performed the update: a real lookup failure
+		// (5xx, retryable) outranks ErrUnsupported (501, permanent), which outranks
+		// the all-not-found 404 — so a transient backend failure is never masked as
+		// "template not found" or "unsupported".
+		var unsupportedErr, lookupErr error
 		for _, a := range registry.List() {
 			if _, err := a.GetTemplate(r.Context(), templateID); err != nil {
+				if !isNotFoundStatus(err) && lookupErr == nil {
+					lookupErr = err
+				}
 				continue
 			}
 			updated, err := a.UpdateTemplate(r.Context(), templateID, updateReq)
@@ -1360,6 +1372,10 @@ func UpdateTemplateHandler(registry *adapter.Registry, router *routing.Router) h
 			return
 		}
 
+		if lookupErr != nil {
+			writeAdapterError(w, lookupErr, http.StatusInternalServerError)
+			return
+		}
 		if unsupportedErr != nil {
 			writeAdapterError(w, unsupportedErr, http.StatusNotImplemented)
 			return

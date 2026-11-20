@@ -380,7 +380,7 @@ func (a *Adapter) GetTemplate(_ context.Context, templateID string) (*adapter.Te
 	defer a.mu.RUnlock()
 	t, ok := a.templates[templateID]
 	if !ok {
-		return nil, fmt.Errorf("template %q not found", templateID)
+		return nil, fmt.Errorf("template %q: %w", templateID, adapter.ErrTemplateNotFound)
 	}
 	return t, nil
 }
@@ -416,7 +416,7 @@ func (a *Adapter) UpdateTemplate(_ context.Context, templateID string, req *adap
 	defer a.mu.Unlock()
 	t, ok := a.templates[templateID]
 	if !ok {
-		return nil, fmt.Errorf("template %q not found", templateID)
+		return nil, fmt.Errorf("template %q: %w", templateID, adapter.ErrTemplateNotFound)
 	}
 	// Copy-on-write: GetTemplate/ListTemplates hand out the stored pointers,
 	// so mutating in place would race with readers holding an older snapshot.
