@@ -1324,6 +1324,15 @@ func UpdateTemplateHandler(registry *adapter.Registry, router *routing.Router) h
 			return
 		}
 
+		// An explicit empty name is rejected rather than silently applied: Name
+		// is a pointer so we can tell {"name":""} from an omitted name, and an
+		// empty display name is invalid (CreateTemplate requires a non-empty
+		// name). Omit the field to leave the name unchanged.
+		if req.Name != nil && *req.Name == "" {
+			writeError(w, http.StatusBadRequest, "Template name cannot be empty")
+			return
+		}
+
 		updateReq := &adapter.UpdateTemplateRequest{
 			Name:     req.Name,
 			Public:   req.Public,

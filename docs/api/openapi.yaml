@@ -1987,7 +1987,10 @@ components:
       properties:
         name:
           type: string
-          description: New display name (not supported by E2B Cloud or agent-sandbox).
+          description: >-
+            New display name (not supported by E2B Cloud or agent-sandbox).
+            Omit the field to leave the name unchanged; an explicit empty
+            string is rejected with 400.
           example: my-template
         public:
           type: boolean

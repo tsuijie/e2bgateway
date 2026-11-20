@@ -1618,20 +1618,31 @@ func TestTriggerBuildHandler_RealBackendErrors(t *testing.T) {
 func TestUpdateTemplateHandlerNamePresence(t *testing.T) {
 	reg, router := setupTestRouter()
 	handler := v1.UpdateTemplateHandler(reg, router)
-	for _, body := range []string{`{"name": "renamed"}`, `{"public": true}`, `{"name": ""}`} {
+
+	// An explicit non-empty name is applied; an omitted name leaves it unchanged.
+	for _, tc := range []struct{ body, want string }{
+		{`{"name": "renamed"}`, "renamed"},
+		{`{"public": true}`, "renamed"}, // name omitted → unchanged
+	} {
 		w := httptest.NewRecorder()
-		handler(w, testWithChiParam(http.MethodPatch, "/v2/templates/base", body, map[string]string{"templateID": "base"}))
+		handler(w, testWithChiParam(http.MethodPatch, "/v2/templates/base", tc.body, map[string]string{"templateID": "base"}))
 		require.Equal(t, http.StatusOK, w.Code)
-		want := "renamed"
-		if body == `{"name": ""}` {
-			want = ""
-		}
 		backend, ok := reg.Get("mock")
 		require.True(t, ok)
 		stored, err := backend.GetTemplate(context.Background(), "base")
 		require.NoError(t, err)
-		assert.Equal(t, want, stored.Name)
+		assert.Equal(t, tc.want, stored.Name)
 	}
+
+	// An explicit empty name is rejected with 400 and must not mutate the store.
+	w := httptest.NewRecorder()
+	handler(w, testWithChiParam(http.MethodPatch, "/v2/templates/base", `{"name": ""}`, map[string]string{"templateID": "base"}))
+	assert.Equal(t, http.StatusBadRequest, w.Code, "empty name should be rejected")
+	backend, ok := reg.Get("mock")
+	require.True(t, ok)
+	stored, err := backend.GetTemplate(context.Background(), "base")
+	require.NoError(t, err)
+	assert.Equal(t, "renamed", stored.Name, "rejected empty name must not change the stored name")
 }
 
 func TestUpdateTemplateHandlerLookupErrorNotMaskedAs404(t *testing.T) {

@@ -704,17 +704,24 @@ func TestE2E_UpdateTemplate_E2BCloud(t *testing.T) {
 	require.Equal(t, map[string]any{"public": false}, patchedBodies[0])
 
 	// Fields the upstream API cannot persist must yield 501, not a fake 200,
-	// and must not reach upstream at all.
+	// and must not reach upstream at all. (An empty name is rejected earlier at
+	// the handler with 400, so it is not part of this unsupported-field set.)
 	for name, req := range map[string]dto.UpdateTemplateRequest{
-		"name":       {Name: new("renamed")},
-		"empty name": {Name: new("")},
-		"cpuCount":   {CPUCount: new(4)},
-		"memoryMB":   {MemoryMB: new(2048)},
+		"name":     {Name: new("renamed")},
+		"cpuCount": {CPUCount: new(4)},
+		"memoryMB": {MemoryMB: new(2048)},
 	} {
 		unsupportedResp := doJSON(t, ts, http.MethodPatch, "/v2/templates/base", req)
 		assert.Equal(t, http.StatusNotImplemented, unsupportedResp.StatusCode, "field %s should be unsupported", name)
 	}
 	assert.Len(t, patchedBodies, 1, "unsupported fields must not reach upstream")
+
+	// An explicit empty name is rejected at the handler with 400 before any
+	// backend is consulted.
+	emptyNameResp := doJSON(t, ts, http.MethodPatch, "/v2/templates/base", dto.UpdateTemplateRequest{
+		Name: new(""),
+	})
+	assertE2BError(t, emptyNameResp, http.StatusBadRequest)
 
 	// Unknown template: the upstream 404 surfaces as a well-formed 404.
 	notFoundResp := doJSON(t, ts, http.MethodPatch, "/v2/templates/does-not-exist", dto.UpdateTemplateRequest{
